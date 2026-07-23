@@ -1,6 +1,7 @@
 import { Elysia } from 'elysia'
-import { initORM } from './db'
-import { UserService } from './modules/user/service'
+import { initORM } from '../db'
+import { UserService } from '../modules/user/service'
+
 
 // One fork per request, shared by every service in that request (one Unit of Work).
 // RULE: never use the global `orm.em` in modules — only the derived `em`/services.

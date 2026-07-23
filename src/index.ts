@@ -1,87 +1,112 @@
-import { Elysia } from 'elysia'
-import { cors } from '@elysiajs/cors'
-import { swagger } from '@elysiajs/swagger'
-import { opentelemetry } from '@elysiajs/opentelemetry'
+import cluster from 'node:cluster'
+import os from 'node:os'
+import process from 'node:process'
 import { initORM } from './db'
-import { setup } from './setup'
-import responseMiddleware from './middlewares/responseMiddleware'
-import errorMiddleware from './middlewares/errorMiddleware'
-import userController from './modules/user'
+import logger from './utils/logger'
 
-const isProd = process.env.NODE_ENV === 'production'
+let shuttingDown = false
 
-const startApp = async () => {
-  // fail fast on missing secrets: never boot with an empty JWT secret
-  for (const key of ['JWT_SECRET', 'DATABASE_URL'])
-    if (!process.env[key]) throw new Error(`Missing required env var: ${key}`)
-
-  const { orm } = await initORM()
-
-  if (isProd) {
-    // prod: explicit migrations only. updateSchema() can drop columns with data.
-    // In cluster mode, run migrations once (deploy step / primary), not per worker.
-    await orm.getMigrator().up()
-  } else {
-    await orm.getSchemaGenerator().updateSchema()
-  }
-
-  const app = new Elysia()
-    .use(cors())
-    .use(opentelemetry())
-    .use(setup) // per-request em fork + services (see src/setup.ts)
-    .onAfterHandle(responseMiddleware)
-    .onError(errorMiddleware)
-    .get('/', () => "It's works!")
-    .get('/health', () => ({ status: 'ok' })) // for LB / k8s probes
-
-  if (!isProd || process.env.ENABLE_SWAGGER === 'true') {
-    app.use(
-      swagger({
-        path: '/swagger-ui',
-        provider: 'swagger-ui',
-        documentation: {
-          info: {
-            title: 'Elysia template v4',
-            description: 'Elysia + MikroORM template API documentation',
-            version: '1.0.0',
-          },
-          components: {
-            securitySchemes: {
-              JwtAuth: {
-                type: 'http',
-                scheme: 'bearer',
-                bearerFormat: 'JWT',
-                description: 'Enter JWT Bearer token **_only_**',
-              },
-            },
-          },
-        },
-        swaggerOptions: { persistAuthorization: true },
-      }),
-    )
-  }
-
-  app
-    .group('/api', (group) => group.use(userController))
-    .listen(Number(process.env.PORT ?? 3000))
-
-  console.log(`🦊 Elysia is running at http://${app.server?.hostname}:${app.server?.port}`)
-  if (!isProd)
-    console.log(`🦊 Swagger UI: http://${app.server?.hostname}:${app.server?.port}/swagger-ui`)
-
-  // graceful shutdown: stop accepting requests, then close DB pool cleanly
-  const shutdown = async (signal: string) => {
-    console.log(`${signal} received, shutting down...`)
-    await app.stop()
-    await orm.close()
-    process.exit(0)
-  }
-  process.on('SIGTERM', () => void shutdown('SIGTERM'))
-  process.on('SIGINT', () => void shutdown('SIGINT'))
+for (const key of ['JWT_SECRET', 'DATABASE_URL']) {
+  if (!process.env[key]) throw new Error(`Missing required env var: ${key}`)
 }
 
-startApp().catch((err) => {
-  // exit non-zero so the orchestrator restarts us instead of a half-booted app
+const syncSchema = async (closeWhenDone: boolean) => {
+  const { orm } = await initORM()
+  await orm.schema.updateSchema();
+  if (closeWhenDone) {
+    await orm.close()
+  }
+  return orm
+}
+
+const logReady = () => {
+  logger.info(`🦊 Elysia is running at http://localhost:${process.env.PORT}`)
+  if (process.env.ENABLE_SWAGGER === 'true') {
+    logger.info(`🦊 Swagger UI: http://localhost:${process.env.PORT}/swagger-ui`)
+  }
+}
+
+const main = async () => {
+  const workers = parseInt(process.env.WORKERS || '1')
+
+  if (workers <= 1) {
+    //single mode cached in main thread => don't close the pool
+    await syncSchema(false)
+    logger.info(
+      `Running in single mode. Total database connection pool: ${Number(process.env.DB_POOL_MAX || 10)}`,
+    )
+    await import('./server')
+    logReady()
+
+    // single mode: forward signals directly to the server's own shutdown handler
+    process.on('SIGTERM', () => process.emit('SIGTERM' as any))
+    return
+  }
+
+  if (cluster.isPrimary) {
+     //cluster mode fork the datasource again in each worker => safe to close this connection in main thread
+    await syncSchema(true)
+
+    if (workers > os.availableParallelism()) {
+      logger.warn(`WORKERS (${workers}) exceeds available parallelism (${os.availableParallelism()})`)
+    }
+    logger.info(
+      `Starting ${workers} workers. Total database connections: ${Number(process.env.DB_POOL_MAX || 10) * workers}`,
+    )
+
+    for (let i = 0; i < workers; i++) cluster.fork()
+
+    // #2: restart crashed workers, but never during a deliberate shutdown
+    cluster.on('exit', (worker, code, signal) => {
+      //IMPORTANT: WITHOUT THIS CHECK, WORKERS WILL RESTART INFINITYLY IF THEY CRASH. AND APP CAN NOT SHUT DOWN.
+      if (shuttingDown) return
+      logger.warn(`Worker ${worker.process.pid} died (${signal ?? code}), restarting...`)
+      cluster.fork()
+    })
+
+    // #3: propagate shutdown signals to every worker, exit primary once all are gone
+    const shutdown = (signal: NodeJS.Signals) => {
+      if (shuttingDown) return
+      shuttingDown = true
+      logger.info(`${signal} received, stopping ${workers} workers...`)
+
+      const ids = Object.keys(cluster.workers ?? {})
+      if (ids.length === 0) {
+        process.exit(0)
+        return
+      }
+      for (const id of ids) cluster.workers?.[id]?.kill(signal)
+
+      cluster.on('exit', () => {
+        if (Object.keys(cluster.workers ?? {}).length === 0) {
+          logger.info('All workers stopped, exiting primary')
+          process.exit(0)
+        }
+      })
+
+      // safety net: force-exit if workers hang past their own shutdown timeout
+      setTimeout(() => {
+        logger.warn('Workers did not exit in time, forcing shutdown')
+        process.exit(1)
+      }, 15_000).unref()
+    }
+    process.on('SIGTERM', () => shutdown('SIGTERM'))
+    process.on('SIGINT', () => shutdown('SIGINT'))
+
+    // log readiness once workers have actually come online, not just been spawned
+    let onlineCount = 0
+    cluster.on('online', (worker) => {
+      onlineCount++
+      logger.info(`Worker ${worker.process.pid} online (${onlineCount}/${workers})`)
+      if (onlineCount === workers) logReady()
+    })
+  } else {
+    await import('./server')
+    logger.info(`Worker ${process.pid} started`)
+  }
+}
+
+main().catch((err) => {
   console.error(err)
   process.exit(1)
 })

@@ -6,20 +6,16 @@
     "dev": "bun run --watch src/index.ts",
     "start": "bun run src/index.ts",
     "typecheck": "bunx tsc --noEmit",
-    "migration:create": "bunx mikro-orm migration:create",
-    "migration:up": "bunx mikro-orm migration:up",
-    "migration:down": "bunx mikro-orm migration:down",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {
     "@elysiajs/cors": "^1.2.0",
-    "@elysiajs/opentelemetry": "^1.2.0",
     "@elysiajs/swagger": "^1.2.0",
     "@mikro-orm/core": "^6.4.5",
-    "@mikro-orm/migrations": "^6.4.5",
     "@mikro-orm/postgresql": "^6.4.5",
     "elysia": "^1.2.25",
-    "jsonwebtoken": "^9.0.2"
+    "jsonwebtoken": "^9.0.2",
+    "winston": "^3.19.0"
   },
   "devDependencies": {
     "@mikro-orm/cli": "^6.4.5",

@@ -1,11 +1,9 @@
 import { Elysia } from 'elysia'
-import { setup } from '../../setup'
 import authMacro from '../../macros/auth'
 import { NotFoundError } from '../../utils/http-errors'
 import { UserModel } from './model'
 
 const userController = new Elysia({ prefix: '/users' })
-  .use(setup)
   .use(authMacro)
   .post(
     '/register',
