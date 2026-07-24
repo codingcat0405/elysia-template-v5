@@ -31,7 +31,7 @@ export class UserService {
   }
 
   async login({ username, password }: UserModel['loginBody']) {
-    const user = await this.em.findOne(User, { username })
+    const user = await this.em.findOne(User, { username }, {cache: 1000 * 60})
     // same error for "no user" and "bad password" -> no username enumeration
     if (!user || !(await Bun.password.verify(password, user.password, 'bcrypt')))
       throw new UnauthorizedError('Invalid username or password')
