@@ -27,7 +27,7 @@ class RedisCacheAdapter implements CacheAdapter {
     const redis = await getRedis()
     const payload = JSON.stringify({ data, origin })
     const ttl = expiration && expiration > 0 ? expiration : DEFAULT_TTL_MS
-    await redis.set(this.key(name), payload, { PX: ttl })
+    await redis.set(this.key(name), payload, 'PX', ttl)
   }
 
   async remove(name: string): Promise<void> {
@@ -40,9 +40,9 @@ class RedisCacheAdapter implements CacheAdapter {
     // SCAN instead of KEYS: non-blocking, safe on a shared/production Redis
     let cursor = '0'
     do {
-      const result = await redis.scan(cursor, { MATCH: `${PREFIX}*`, COUNT: 100 })
-      cursor = result.cursor
-      if (result.keys.length) await redis.del(result.keys)
+      const [next, keys] = await redis.scan(cursor, 'MATCH', `${PREFIX}*`, 'COUNT', 100)
+      cursor = next
+      if (keys.length) await redis.del(...keys)
     } while (cursor !== '0')
   }
 

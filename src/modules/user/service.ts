@@ -11,7 +11,7 @@ export class UserService {
   // em is the per-request fork injected by setup.ts.
   // Service lives one request; do NOT make this a singleton (app-lifetime object
   // must never hold a request-lifetime em).
-  constructor(private readonly em: EntityManager) {}
+  constructor(private readonly em: EntityManager) { }
 
   async register({ username, password }: UserModel['registerBody']) {
     const user = this.em.create(User, {
@@ -31,7 +31,7 @@ export class UserService {
   }
 
   async login({ username, password }: UserModel['loginBody']) {
-    const user = await this.em.findOne(User, { username }, {cache: 1000 * 60})
+    const user = await this.em.findOne(User, { username })
     // same error for "no user" and "bad password" -> no username enumeration
     if (!user || !(await Bun.password.verify(password, user.password, 'bcrypt')))
       throw new UnauthorizedError('Invalid username or password')

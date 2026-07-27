@@ -10,7 +10,12 @@ const errorMiddleware = ({ code, error, set }: any) => {
 
   if (code === 'VALIDATION') {
     set.status = 400
-    return { message: error.message, status: 400 }
+    const validationError = JSON.parse(error.message)
+    return { 
+      message: validationError?.summary ?? 'Validation error',
+      errors: validationError?.errors ?? [],
+      status: 400 
+    }
   }
 
   if (code === 'NOT_FOUND') {

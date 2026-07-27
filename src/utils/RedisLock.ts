@@ -1,10 +1,10 @@
-import { RedisClientType } from "redis";
+import { Redis } from "ioredis";
 import * as crypto from "crypto";
 
 class RedisLock {
-  private client: RedisClientType;
+  private client: Redis;
   private unlockScript: string;
-  constructor(redisClient: RedisClientType) {
+  constructor(redisClient: Redis) {
     this.client = redisClient;
     this.unlockScript = `
       if redis.call("get",KEYS[1]) == ARGV[1] then
@@ -24,10 +24,7 @@ class RedisLock {
   async acquire(resource: string, ttl = 30000) {
 
     const token = this.generateToken();
-    const result = await this.client.set(resource, token, {
-      NX: true,
-      PX: ttl
-    });
+    const result = await this.client.set(resource, token, 'PX', ttl, 'NX');
 
     if (result === 'OK') {
       return token; // Return token if lock acquired
@@ -37,13 +34,7 @@ class RedisLock {
 
   // Release lock
   async release(resource: string, token: string) {
-    const result = await this.client.eval(
-      this.unlockScript,
-      {
-        keys: [resource],
-        arguments: [token]
-      }
-    );
+    const result = await this.client.eval(this.unlockScript, 1, resource, token);
     return result === 1; // True if released, false otherwise
   }
 }

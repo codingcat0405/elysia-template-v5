@@ -27,7 +27,7 @@ const logReady = () => {
 }
 
 const main = async () => {
-  const workers = parseInt(process.env.WORKERS || '1')
+  const workers = parseInt(process.env.WORKER_THREADS || '1')
 
   if (workers <= 1) {
     //single mode cached in main thread => don't close the pool
