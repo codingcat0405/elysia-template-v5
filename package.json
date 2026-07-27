@@ -5,14 +5,19 @@
   "scripts": {
     "dev": "bun run --watch src/index.ts",
     "start": "bun run src/index.ts",
+    "worker:dev": "bun run --watch src/worker.ts",
+    "worker": "bun run src/worker.ts",
     "typecheck": "bunx tsc --noEmit",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {
+    "@bull-board/api": "^8.3.0",
+    "@bull-board/elysia": "^8.3.0",
     "@elysiajs/cors": "^1.2.0",
     "@elysiajs/swagger": "^1.2.0",
     "@mikro-orm/core": "^6.4.5",
     "@mikro-orm/postgresql": "^6.4.5",
+    "bullmq": "^5.81.2",
     "elysia": "^1.2.25",
     "ioredis": "^5.11.1",
     "jsonwebtoken": "^9.0.2",

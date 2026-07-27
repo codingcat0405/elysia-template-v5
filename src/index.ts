@@ -5,9 +5,15 @@ import { initORM } from './db'
 import logger from './utils/logger'
 
 let shuttingDown = false
-
 for (const key of ['JWT_SECRET', 'DATABASE_URL']) {
-  if (!process.env[key]) throw new Error(`Missing required env var: ${key}`)
+  if (!process.env[key]) {
+    throw new Error(`Missing required env var: ${key}`)
+  }
+}
+if(process.env.ENABLE_BULL_BOARD === 'true') {
+  if (!process.env.BULL_BOARD_USER || !process.env.BULL_BOARD_PASSWORD) {
+    throw new Error('Missing required env var: BULL_BOARD_USER or BULL_BOARD_PASSWORD')
+  }
 }
 
 const syncSchema = async (closeWhenDone: boolean) => {
@@ -24,6 +30,9 @@ const logReady = () => {
   if (process.env.ENABLE_SWAGGER === 'true') {
     logger.info(`🦊 Swagger UI: http://localhost:${process.env.PORT}/swagger-ui`)
   }
+  if (process.env.ENABLE_BULL_BOARD === 'true') {
+    logger.info(`🦊 Bull Board: http://localhost:${process.env.PORT}/bull-board Credentials: ${process.env.BULL_BOARD_USER}:${process.env.BULL_BOARD_PASSWORD}`)
+  }
 }
 
 const main = async () => {
@@ -35,7 +44,7 @@ const main = async () => {
     logger.info(
       `Running in single mode. Total database connection pool: ${Number(process.env.DB_POOL_MAX || 10)}`,
     )
-    await import('./server')
+    await import('./server.js')
     logReady()
 
     // single mode: forward signals directly to the server's own shutdown handler
@@ -101,7 +110,7 @@ const main = async () => {
       if (onlineCount === workers) logReady()
     })
   } else {
-    await import('./server')
+    await import('./server.js')
     logger.info(`Worker ${process.pid} started`)
   }
 }

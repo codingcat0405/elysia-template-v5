@@ -7,11 +7,16 @@ import userController from './modules/user'
 import { setup } from './middlewares/setup'
 import { initORM } from './db'
 import logger from './utils/logger'
+import { createBullBoardPlugin } from './bull-board'
 
 const startApp = async () => {
 
 
   const { orm } = await initORM() // same cached instance `setup.ts` forks from
+
+  // .group()'s callback isn't async-aware — resolve the plugin first
+  const bullBoardPlugin =
+    process.env.ENABLE_BULL_BOARD === 'true' ? await createBullBoardPlugin() : null
 
   const app = new Elysia()
     .use(cors())
@@ -20,8 +25,13 @@ const startApp = async () => {
     .onError(errorMiddleware)
     .get('/', () => "It's works!")
     .get('/health', () => ({ status: 'ok' }))
-    .group('/api', (group) => group.use(userController))
+    .group('/api', (group) => {
+      group
+        .use(userController)
 
+      return group
+    })
+  if (bullBoardPlugin) app.use(bullBoardPlugin)
   // compose everything BEFORE listen — never .use() after the server is live
   if (process.env.ENABLE_SWAGGER === 'true') {
     app.use(

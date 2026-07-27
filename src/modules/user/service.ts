@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken'
 import { User } from '../../entities/User'
 import { ConflictError, UnauthorizedError } from '../../utils/http-errors'
 import type { UserModel } from './model'
+import { userQueue } from './queue'
 
 // cast: @types/jsonwebtoken types expiresIn as ms.StringValue, env vars are plain strings
 const JWT_EXPIRES_IN = (process.env.JWT_EXPIRES_IN ?? '1d') as jwt.SignOptions['expiresIn']
@@ -27,6 +28,14 @@ export class UserService {
         throw new ConflictError('User already exists')
       throw e
     }
+        // enqueue AFTER flush succeeds — never enqueue a job for a row that
+    // might still get rolled back
+    await userQueue.add('send-welcome-email', {
+      userId: Number(user.id),
+      username: user.username,
+      type: 'send-welcome-email',
+    })
+
     return this.toPublic(user)
   }
 

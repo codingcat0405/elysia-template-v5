@@ -2,9 +2,11 @@ import { Elysia } from 'elysia'
 import authMacro from '../../macros/auth'
 import { NotFoundError } from '../../utils/http-errors'
 import { UserModel } from './model'
+import { setup } from '../../middlewares/setup'
 
 const userController = new Elysia({ prefix: '/users' })
   .use(authMacro)
+  .use(setup) 
   .post(
     '/register',
     ({ body, userService }) => userService.register(body),
