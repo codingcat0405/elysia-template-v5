@@ -40,8 +40,8 @@ const startApp = async () => {
         provider: 'swagger-ui',
         documentation: {
           info: {
-            title: 'Elysia template',
-            description: 'Elysia + MikroORM template API documentation',
+            title: 'Elysia Forge',
+            description: 'Production Ready Elysia Template. API documentation',
             version: '1.0.0',
           },
           components: {
