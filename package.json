@@ -1,5 +1,5 @@
 {
-  "name": "elysia-template-v4",
+  "name": "elysia-template",
   "version": "1.0.0",
   "module": "src/index.ts",
   "scripts": {
