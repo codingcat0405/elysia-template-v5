@@ -1,4 +1,4 @@
-# Elysia + MikroORM + BullMQ template
+# Elysia Forge - Elysia + MikroORM + BullMQ template
 
 Production-hardened Bun backend: Elysia (HTTP), MikroORM/PostgreSQL (data), BullMQ/Redis (background jobs), Winston (logging), JWT auth, optional `node:cluster` scaling.
 

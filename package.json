@@ -28,8 +28,5 @@
     "@types/jsonwebtoken": "^9.0.8",
     "bun-types": "^1.2.0",
     "typescript": "^5.7.0"
-  },
-  "mikro-orm": {
-    "configPaths": ["./src/mikro-orm.config.ts"]
   }
 }
